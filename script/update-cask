@@ -1,0 +1,52 @@
+#!/usr/bin/env ruby
+
+require "json"
+
+abort "Usage: script/update-cask RELEASE_JSON [CASK]" unless (1..2).cover?(ARGV.length)
+
+release_path = ARGV.fetch(0)
+cask_path = ARGV.fetch(1, "Casks/rufin.rb")
+release = JSON.parse(File.read(release_path))
+
+abort "The latest release is a draft" if release.fetch("draft")
+abort "The latest release is a prerelease" if release.fetch("prerelease")
+
+tag = release.fetch("tag_name")
+version_match = /\Av(?<version>\d+\.\d+\.\d+)\z/.match(tag)
+abort "Unexpected Rufin release tag: #{tag}" unless version_match
+
+version = version_match[:version]
+assets = release.fetch("assets")
+
+digest_for = lambda do |name|
+  matches = assets.select { |asset| asset.fetch("name") == name }
+  abort "Expected one #{name} asset, found #{matches.length}" unless matches.length == 1
+
+  asset = matches.fetch(0)
+  expected_url = "https://github.com/screwys/Rufin/releases/download/#{tag}/#{name}"
+  actual_url = asset.fetch("browser_download_url")
+  abort "Unexpected URL for #{name}: #{actual_url}" unless actual_url == expected_url
+
+  digest = asset.fetch("digest")
+  digest_match = /\Asha256:(?<sha>[0-9a-f]{64})\z/.match(digest)
+  abort "Unexpected digest for #{name}: #{digest}" unless digest_match
+
+  digest_match[:sha]
+end
+
+arm_sha = digest_for.call("Rufin-macos-arm64.dmg")
+intel_sha = digest_for.call("Rufin-macos-x86_64.dmg")
+
+current = File.read(cask_path)
+release_block = /^  version "[^"]+"\n  sha256 arm:   "[0-9a-f]{64}",\n         intel: "[0-9a-f]{64}"$/
+abort "Could not find the Rufin release block" unless current.scan(release_block).length == 1
+
+updated = current.sub(
+  release_block,
+  "  version \"#{version}\"\n" \
+    "  sha256 arm:   \"#{arm_sha}\",\n" \
+    "         intel: \"#{intel_sha}\"",
+)
+File.write(cask_path, updated) unless updated == current
+
+puts version
