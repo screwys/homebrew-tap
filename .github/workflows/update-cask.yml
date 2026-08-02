@@ -1,8 +1,6 @@
 name: Update Cask
 
 on:
-  schedule:
-    - cron: "17 */6 * * *"
   workflow_dispatch:
     inputs:
       tag:
@@ -38,37 +36,20 @@ jobs:
       - name: Render candidate Cask
         id: render
         env:
-          EVENT_NAME: ${{ github.event_name }}
           GH_TOKEN: ${{ github.token }}
           REQUESTED_TAG: ${{ inputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          case "${EVENT_NAME}" in
-            schedule)
-              selected_tag=""
-              ;;
-            workflow_dispatch)
-              selected_tag="${REQUESTED_TAG}"
-              if [[ -z "${selected_tag}" ]]; then
-                selected_tag="$(script/update-cask --current-tag)"
-              fi
-              ;;
-            *)
-              echo "Unsupported workflow event: ${EVENT_NAME}" >&2
-              exit 1
-              ;;
-          esac
-
-          if [[ -n "${selected_tag}" ]]; then
-            if [[ ! "${selected_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "The release tag must look like v1.2.3" >&2
-              exit 1
-            fi
-            release_url="https://api.github.com/repos/screwys/Rufin/releases/tags/${selected_tag}"
-          else
-            release_url="https://api.github.com/repos/screwys/Rufin/releases/latest"
+          selected_tag="${REQUESTED_TAG}"
+          if [[ -z "${selected_tag}" ]]; then
+            selected_tag="$(script/update-cask --current-tag)"
           fi
+          if [[ ! "${selected_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The release tag must look like v1.2.3" >&2
+            exit 1
+          fi
+          release_url="https://api.github.com/repos/screwys/Rufin/releases/tags/${selected_tag}"
 
           release_json="${RUNNER_TEMP}/rufin-release.json"
           curl \
