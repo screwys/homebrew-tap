@@ -1,0 +1,17 @@
+{
+  "tag_name": "v0.12.0",
+  "draft": false,
+  "prerelease": false,
+  "assets": [
+    {
+      "name": "Rufin-macos-arm64.dmg",
+      "browser_download_url": "https://github.com/screwys/Rufin/releases/download/v0.12.0/Rufin-macos-arm64.dmg",
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "name": "Rufin-macos-x86_64.dmg",
+      "browser_download_url": "https://github.com/screwys/Rufin/releases/download/v0.12.0/Rufin-macos-x86_64.dmg",
+      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ]
+}
