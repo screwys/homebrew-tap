@@ -4,29 +4,72 @@ on:
   schedule:
     - cron: "17 */6 * * *"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Rufin release tag to update, such as v0.12.0. Leave blank to test the current Cask.
+        required: false
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: update-cask
   cancel-in-progress: false
 
 jobs:
-  update:
+  validate:
     if: github.ref == 'refs/heads/main'
     runs-on: macos-15
     timeout-minutes: 15
+    outputs:
+      cask_sha256: ${{ steps.render.outputs.cask_sha256 }}
+      tag: ${{ steps.render.outputs.tag }}
+      version: ${{ steps.render.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
 
-      - name: Update Cask
-        id: update
+      - name: Test Cask renderer
+        shell: bash
+        run: ruby test/update_cask_test.rb
+
+      - name: Render candidate Cask
+        id: render
         env:
+          EVENT_NAME: ${{ github.event_name }}
           GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
+          case "${EVENT_NAME}" in
+            schedule)
+              selected_tag=""
+              ;;
+            workflow_dispatch)
+              selected_tag="${REQUESTED_TAG}"
+              if [[ -z "${selected_tag}" ]]; then
+                selected_tag="$(script/update-cask --current-tag)"
+              fi
+              ;;
+            *)
+              echo "Unsupported workflow event: ${EVENT_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
+          if [[ -n "${selected_tag}" ]]; then
+            if [[ ! "${selected_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "The release tag must look like v1.2.3" >&2
+              exit 1
+            fi
+            release_url="https://api.github.com/repos/screwys/Rufin/releases/tags/${selected_tag}"
+          else
+            release_url="https://api.github.com/repos/screwys/Rufin/releases/latest"
+          fi
+
           release_json="${RUNNER_TEMP}/rufin-release.json"
           curl \
             --fail-with-body \
@@ -37,24 +80,106 @@ jobs:
             --retry 3 \
             --show-error \
             --silent \
-            https://api.github.com/repos/screwys/Rufin/releases/latest \
+            "${release_url}" \
             > "${release_json}"
           version="$(script/update-cask "${release_json}")"
-          printf 'version=%s\n' "${version}" >> "${GITHUB_OUTPUT}"
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "The Cask renderer returned an invalid version: ${version}" >&2
+            exit 1
+          fi
+          tag="v${version}"
+          if [[ -n "${selected_tag}" && "${tag}" != "${selected_tag}" ]]; then
+            echo "The fetched release tag does not match the selected tag" >&2
+            exit 1
+          fi
+          cask_sha256="$(shasum -a 256 Casks/rufin.rb | awk '{print $1}')"
+          if [[ ! "${cask_sha256}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Could not calculate the candidate Cask SHA-256" >&2
+            exit 1
+          fi
+          {
+            printf 'cask_sha256=%s\n' "${cask_sha256}"
+            printf 'tag=%s\n' "${tag}"
+            printf 'version=%s\n' "${version}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Validate Cask
         shell: bash
         run: |
           set -euo pipefail
+          git diff --check -- Casks/rufin.rb
           brew tap screwys/tap
           tap_dir="$(brew --repository screwys/tap)"
           cp Casks/rufin.rb "${tap_dir}/Casks/rufin.rb"
           brew style --cask "${tap_dir}/Casks/rufin.rb"
           brew audit --cask --strict --arch=all --os=macos screwys/tap/rufin
 
+  publish:
+    if: github.ref == 'refs/heads/main'
+    needs: validate
+    permissions:
+      contents: write
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Re-render validated Cask
+        env:
+          EXPECTED_CASK_SHA256: ${{ needs.validate.outputs.cask_sha256 }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ "${TAG}" != "v${VERSION}" ]]; then
+            echo "The validation job returned invalid release metadata" >&2
+            exit 1
+          fi
+          if [[ ! "${EXPECTED_CASK_SHA256}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "The validation job returned an invalid Cask SHA-256" >&2
+            exit 1
+          fi
+
+          release_json="${RUNNER_TEMP}/rufin-release.json"
+          curl \
+            --fail-with-body \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --location \
+            --retry 3 \
+            --show-error \
+            --silent \
+            "https://api.github.com/repos/screwys/Rufin/releases/tags/${TAG}" \
+            > "${release_json}"
+          rendered_version="$(script/update-cask "${release_json}")"
+          if [[ "${rendered_version}" != "${VERSION}" ]]; then
+            echo "The exact release tag rendered version ${rendered_version}, expected ${VERSION}" >&2
+            exit 1
+          fi
+
+          cask_sha256="$(shasum -a 256 Casks/rufin.rb | awk '{print $1}')"
+          if [[ "${cask_sha256}" != "${EXPECTED_CASK_SHA256}" ]]; then
+            echo "The re-rendered Cask does not match the validated candidate" >&2
+            exit 1
+          fi
+          git diff --check -- Casks/rufin.rb
+          if ! git diff --quiet -- . ':(exclude)Casks/rufin.rb'; then
+            echo "The renderer changed a file other than Casks/rufin.rb" >&2
+            git diff --name-only >&2
+            exit 1
+          fi
+          if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+            echo "The renderer created an unexpected file" >&2
+            git ls-files --others --exclude-standard >&2
+            exit 1
+          fi
+
       - name: Commit Cask
         env:
-          VERSION: ${{ steps.update.outputs.version }}
+          VERSION: ${{ needs.validate.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
@@ -65,5 +190,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- Casks/rufin.rb
+          if [[ "$(git diff --cached --name-only)" != "Casks/rufin.rb" ]]; then
+            echo "Refusing to commit anything other than Casks/rufin.rb" >&2
+            exit 1
+          fi
           git commit -m "chore: update Rufin to ${VERSION}"
           git push origin HEAD:main

@@ -2,14 +2,38 @@
 
 require "json"
 
-abort "Usage: script/update-cask RELEASE_JSON [CASK]" unless (1..2).cover?(ARGV.length)
+CASK_RELEASE_BLOCK = Regexp.new(
+  '^  version "(?<current_version>\d+\.\d+\.\d+)"\n' \
+    '  sha256 arm:   "(?<current_arm_sha>[0-9a-f]{64})",\n' \
+    '         intel: "(?<current_intel_sha>[0-9a-f]{64})"$',
+)
+USAGE = "Usage: script/update-cask RELEASE_JSON [CASK]\n" \
+        "       script/update-cask --current-tag [CASK]"
+
+def read_cask_release(cask_path)
+  cask = File.read(cask_path)
+  matches = cask.scan(CASK_RELEASE_BLOCK)
+  abort "Could not find the Rufin release block" unless matches.length == 1
+
+  [cask, *matches.fetch(0)]
+end
+
+if ARGV.first == "--current-tag"
+  abort USAGE unless (1..2).cover?(ARGV.length)
+
+  _, current_version = read_cask_release(ARGV.fetch(1, "Casks/rufin.rb"))
+  puts "v#{current_version}"
+  exit
+end
+
+abort USAGE unless (1..2).cover?(ARGV.length)
 
 release_path = ARGV.fetch(0)
 cask_path = ARGV.fetch(1, "Casks/rufin.rb")
 release = JSON.parse(File.read(release_path))
 
-abort "The latest release is a draft" if release.fetch("draft")
-abort "The latest release is a prerelease" if release.fetch("prerelease")
+abort "The Rufin release is a draft" if release.fetch("draft")
+abort "The Rufin release is a prerelease" if release.fetch("prerelease")
 
 tag = release.fetch("tag_name")
 version_match = /\Av(?<version>\d+\.\d+\.\d+)\z/.match(tag)
@@ -37,12 +61,19 @@ end
 arm_sha = digest_for.call("Rufin-macos-arm64.dmg")
 intel_sha = digest_for.call("Rufin-macos-x86_64.dmg")
 
-current = File.read(cask_path)
-release_block = /^  version "[^"]+"\n  sha256 arm:   "[0-9a-f]{64}",\n         intel: "[0-9a-f]{64}"$/
-abort "Could not find the Rufin release block" unless current.scan(release_block).length == 1
+current, current_version, current_arm_sha, current_intel_sha = read_cask_release(cask_path)
+version_numbers = version.split(".").map(&:to_i)
+current_version_numbers = current_version.split(".").map(&:to_i)
+version_comparison = version_numbers <=> current_version_numbers
+if version_comparison == -1
+  abort "Refusing to downgrade Rufin from #{current_version} to #{version}"
+end
+if version_comparison.zero? && (arm_sha != current_arm_sha || intel_sha != current_intel_sha)
+  abort "Refusing to change Rufin #{version} asset digests"
+end
 
 updated = current.sub(
-  release_block,
+  CASK_RELEASE_BLOCK,
   "  version \"#{version}\"\n" \
     "  sha256 arm:   \"#{arm_sha}\",\n" \
     "         intel: \"#{intel_sha}\"",
