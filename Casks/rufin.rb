@@ -1,9 +1,9 @@
 cask "rufin" do
   arch arm: "arm64", intel: "x86_64"
 
-  version "0.14.0"
-  sha256 arm:   "95acca5abb43800ce08f3f54dc1fc295c3fa9f08ba1f4050ff3982fa84d34408",
-         intel: "b2862b002b0cddbfd8b1976d9ed50a7dac037b3bcea531dc7da517d0981526c7"
+  version "0.15.0"
+  sha256 arm:   "88773d8318dd1f0208b8bc422a72bc328ee38b829d1769ec836d06f65f926c2f",
+         intel: "568b1b6f9607a6ec7c2fcfbda6c9c8f0e2ca77fae0b16875a7c13b439d50dbf2"
 
   url "https://github.com/screwys/Rufin/releases/download/v#{version}/Rufin-macos-#{arch}.dmg"
   name "Rufin"
