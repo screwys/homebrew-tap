@@ -90,6 +90,7 @@ jobs:
           set -euo pipefail
           git diff --check -- Casks/rufin.rb
           brew tap screwys/tap
+          brew trust --cask screwys/tap/rufin
           tap_dir="$(brew --repository screwys/tap)"
           cp Casks/rufin.rb "${tap_dir}/Casks/rufin.rb"
           brew style --cask "${tap_dir}/Casks/rufin.rb"
