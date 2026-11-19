@@ -93,7 +93,7 @@ jobs:
           brew trust --cask screwys/tap/rufin
           tap_dir="$(brew --repository screwys/tap)"
           cp Casks/rufin.rb "${tap_dir}/Casks/rufin.rb"
-          brew style --cask "${tap_dir}/Casks/rufin.rb"
+          brew style --cask screwys/tap/rufin
           brew audit --cask --strict --arch=all --os=macos screwys/tap/rufin
 
   publish:
