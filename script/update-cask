@@ -47,7 +47,7 @@ digest_for = lambda do |name|
   abort "Expected one #{name} asset, found #{matches.length}" unless matches.length == 1
 
   asset = matches.fetch(0)
-  expected_url = "https://github.com/screwys/Rufin/releases/download/#{tag}/#{name}"
+  expected_url = "https://github.com/rufin-app/rufin/releases/download/#{tag}/#{name}"
   actual_url = asset.fetch("browser_download_url")
   abort "Unexpected URL for #{name}: #{actual_url}" unless actual_url == expected_url
 

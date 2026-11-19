@@ -36,7 +36,7 @@ class UpdateCaskTest < Minitest::Test
                     "  version \"0.12.0\"\n" \
                     "  sha256 arm:   \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n" \
                     "         intel: \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\""
-    expected_url = 'url "https://github.com/screwys/Rufin/releases/download/' \
+    expected_url = 'url "https://github.com/rufin-app/rufin/releases/download/' \
                    'v#{version}/Rufin-macos-#{arch}.dmg"'
     assert_includes updated, expected_url
   end
@@ -91,7 +91,7 @@ class UpdateCaskTest < Minitest::Test
   def test_rejects_an_asset_from_a_different_tag
     change_release do |release|
       release.fetch("assets").first["browser_download_url"] =
-        "https://github.com/screwys/Rufin/releases/download/v0.11.1/Rufin-macos-arm64.dmg"
+        "https://github.com/rufin-app/rufin/releases/download/v0.11.1/Rufin-macos-arm64.dmg"
     end
 
     assert_rejected "Unexpected URL for Rufin-macos-arm64.dmg"

@@ -5,5 +5,5 @@ cask "rufin" do
   sha256 arm:   "1111111111111111111111111111111111111111111111111111111111111111",
          intel: "2222222222222222222222222222222222222222222222222222222222222222"
 
-  url "https://github.com/screwys/Rufin/releases/download/v#{version}/Rufin-macos-#{arch}.dmg"
+  url "https://github.com/rufin-app/rufin/releases/download/v#{version}/Rufin-macos-#{arch}.dmg"
 end
